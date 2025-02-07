@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Access Camera</title>
+    <style>
+        body { text-align: center; font-family: Arial, sans-serif; }
+        video { width: 90%; max-width: 600px; margin-top: 20px; border-radius: 10px; }
+        button { margin-top: 10px; padding: 10px 20px; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h2>Live Camera Access</h2>
+    <video id="video" autoplay></video>
+    <br>
+    <button onclick="startCamera()">Start Camera</button>
+
+    <script>
+        function startCamera() {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function (stream) {
+                    document.getElementById('video').srcObject = stream;
+                })
+                .catch(function (error) {
+                    alert('Camera access denied or not supported.');
+                    console.error(error);
+                });
+        }
+    </script>
+</body>
+</html>
