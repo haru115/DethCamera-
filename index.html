@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Camera Access</title>
+    <style>
+        body { text-align: center; font-family: Arial, sans-serif; }
+        video { width: 90%; max-width: 600px; margin-top: 20px; border-radius: 10px; border: 2px solid black; }
+        canvas { display: none; }
+        button { margin-top: 10px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <h2>Advanced Camera Access</h2>
+    
+    <!-- Video Stream -->
+    <video id="video" autoplay playsinline></video>
+    <br>
+
+    <!-- Buttons -->
+    <button onclick="switchCamera()">Switch Camera</button>
+    <button onclick="capturePhoto()">Capture Photo</button>
+    <button onclick="startRecording()">Start Recording</button>
+    <button onclick="stopRecording()" disabled>Stop Recording</button>
+    <a id="downloadLink" style="display:none" download="recorded-video.mp4">Download Video</a>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        let videoStream;
+        let isFrontCamera = true;
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        // Start Camera Automatically
+        window.onload = startCamera;
+
+        function startCamera() {
+            const constraints = {
+                video: { facingMode: isFrontCamera ? "user" : "environment" }
+            };
+
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then(function (stream) {
+                    videoStream = stream;
+                    document.getElementById('video').srcObject = stream;
+                })
+                .catch(function (error) {
+                    alert('Camera access denied or not supported.');
+                    console.error(error);
+                });
+        }
+
+        // Switch Between Front & Back Camera
+        function switchCamera() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+            }
+            isFrontCamera = !isFrontCamera;
+            startCamera();
+        }
+
+        // Capture Photo
+        function capturePhoto() {
+            let canvas = document.getElementById('canvas');
+            let video = document.getElementById('video');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            let ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            let imageData = canvas.toDataURL('image/png');
+            let link = document.createElement('a');
+            link.href = imageData;
+            link.download = 'captured-photo.png';
+            link.click();
+        }
+
+        // Start Video Recording
+        function startRecording() {
+            recordedChunks = [];
+            mediaRecorder = new MediaRecorder(videoStream, { mimeType: "video/webm" });
+
+            mediaRecorder.ondataavailable = function(event) {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = function() {
+                let blob = new Blob(recordedChunks, { type: "video/mp4" });
+                let url = URL.createObjectURL(blob);
+                let downloadLink = document.getElementById('downloadLink');
+                downloadLink.href = url;
+                downloadLink.style.display = "block";
+            };
+
+            mediaRecorder.start();
+            document.querySelector("button[onclick='stopRecording()']").disabled = false;
+        }
+
+        // Stop Video Recording
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== "inactive") {
+                mediaRecorder.stop();
+            }
+        }
+    </script>
+
+</body>
+</html>
