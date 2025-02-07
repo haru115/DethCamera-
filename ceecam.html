@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate Camera App</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+    <style>
+        body { text-align: center; font-family: Arial, sans-serif; }
+        video, canvas { width: 90%; max-width: 600px; margin-top: 20px; border-radius: 10px; border: 2px solid black; }
+        button { margin-top: 10px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        #filterSelect { margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <h2>📷 Ultimate Camera App 🚀</h2>
+    
+    <!-- Video Stream -->
+    <video id="video" autoplay playsinline></video>
+    <br>
+
+    <!-- Buttons -->
+    <button onclick="switchCamera()">🔄 Switch Camera</button>
+    <button onclick="capturePhoto()">📸 Capture Photo</button>
+    <button onclick="startRecording()">🎥 Start Recording</button>
+    <button onclick="stopRecording()" disabled>🛑 Stop Recording</button>
+    <a id="downloadLink" style="display:none" download="recorded-video.mp4">⬇️ Download Video</a>
+    
+    <!-- Filters Dropdown -->
+    <select id="filterSelect" onchange="applyFilter()">
+        <option value="none">No Filter</option>
+        <option value="grayscale(100%)">Grayscale</option>
+        <option value="sepia(100%)">Sepia</option>
+        <option value="invert(100%)">Invert</option>
+        <option value="blur(5px)">Blur</option>
+    </select>
+
+    <button onclick="toggleStreaming()">📡 Start Live Streaming</button>
+    <button onclick="startFaceDetection()">👤 Detect Faces</button>
+    <button onclick="startQRScanner()">📲 Scan QR Code</button>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        let videoStream;
+        let isFrontCamera = true;
+        let mediaRecorder;
+        let recordedChunks = [];
+        let socket = io('https://your-server.com'); // Change to your server for live streaming
+        let faceDetectionEnabled = false;
+        let qrScanning = false;
+
+        // Start Camera Automatically
+        window.onload = startCamera;
+
+        function startCamera() {
+            const constraints = {
+                video: { facingMode: isFrontCamera ? "user" : "environment" }
+            };
+
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then(function (stream) {
+                    videoStream = stream;
+                    document.getElementById('video').srcObject = stream;
+                })
+                .catch(function (error) {
+                    alert('Camera access denied or not supported.');
+                    console.error(error);
+                });
+        }
+
+        // Switch Between Front & Back Camera
+        function switchCamera() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+            }
+            isFrontCamera = !isFrontCamera;
+            startCamera();
+        }
+
+        // Capture Photo
+        function capturePhoto() {
+            let canvas = document.getElementById('canvas');
+            let video = document.getElementById('video');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            let ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            let imageData = canvas.toDataURL('image/png');
+            let link = document.createElement('a');
+            link.href = imageData;
+            link.download = 'captured-photo.png';
+            link.click();
+        }
+
+        // Start Video Recording
+        function startRecording() {
+            recordedChunks = [];
+            mediaRecorder = new MediaRecorder(videoStream, { mimeType: "video/webm" });
+
+            mediaRecorder.ondataavailable = function(event) {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = function() {
+                let blob = new Blob(recordedChunks, { type: "video/mp4" });
+                let url = URL.createObjectURL(blob);
+                let downloadLink = document.getElementById('downloadLink');
+                downloadLink.href = url;
+                downloadLink.style.display = "block";
+            };
+
+            mediaRecorder.start();
+            document.querySelector("button[onclick='stopRecording()']").disabled = false;
+        }
+
+        // Stop Video Recording
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== "inactive") {
+                mediaRecorder.stop();
+            }
+        }
+
+        // Apply Filters
+        function applyFilter() {
+            let filter = document.getElementById("filterSelect").value;
+            document.getElementById("video").style.filter = filter;
+        }
+
+        // Live Streaming to Another Device
+        function toggleStreaming() {
+            let video = document.getElementById('video');
+            let track = videoStream.getVideoTracks()[0];
+            let imageCapture = new ImageCapture(track);
+
+            setInterval(async () => {
+                let blob = await imageCapture.takePhoto();
+                let reader = new FileReader();
+                reader.onload = function(event) {
+                    socket.emit('stream', event.target.result);
+                };
+                reader.readAsDataURL(blob);
+            }, 1000);
+        }
+
+        // Face Detection
+        async function startFaceDetection() {
+            if (!faceDetectionEnabled) {
+                await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js/models');
+                faceDetectionEnabled = true;
+            }
+            
+            let video = document.getElementById('video');
+            let canvas = document.getElementById('canvas');
+            let ctx = canvas.getContext('2d');
+
+            setInterval(async () => {
+                let faces = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                faces.forEach(face => {
+                    let { x, y, width, height } = face.box;
+                    ctx.strokeStyle = "red";
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x, y, width, height);
+                });
+            }, 1000);
+        }
+
+        // QR Code Scanner
+        function startQRScanner() {
+            let canvas = document.getElementById("canvas");
+            let ctx = canvas.getContext("2d");
+
+            setInterval(() => {
+                if (!qrScanning) return;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                let code = jsQR(imageData.data, imageData.width, imageData.height);
+                if (code) {
+                    alert("QR Code Detected: " + code.data);
+                    qrScanning = false;
+                }
+            }, 500);
+        }
+    </script>
+
+</body>
+</html>
